@@ -15,6 +15,7 @@ import java.util.concurrent.ExecutionException;
 import android.app.ActivityManager;
 import android.app.ActivityManager.RunningAppProcessInfo;
 import android.app.AlarmManager;
+import android.media.AudioManager;
 import android.app.PendingIntent;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
@@ -27,9 +28,9 @@ import android.provider.Settings;
 public class PlatformProxy  extends KrollProxy {
 	public PlatformProxy()
 	{
-		super();		
+		super();
 	}
-	
+
 
 	@Kroll.method
 	public boolean isAirplaneModeOn() {
@@ -48,90 +49,170 @@ public class PlatformProxy  extends KrollProxy {
 	    } catch (ExecutionException e) {
 	        e.printStackTrace();
 	        return false;
-	    }		
+	    }
 	}
 	@Kroll.method
 	public boolean intentAvailable(IntentProxy intent) {
 		if(intent == null){
 			return false;
 		}
-			
+
 		PackageManager packageManager = TiApplication.getInstance().getPackageManager();
-		return (packageManager.queryIntentActivities(intent.getIntent(), PackageManager.MATCH_DEFAULT_ONLY).size() > 0) ;		
+		return (packageManager.queryIntentActivities(intent.getIntent(), PackageManager.MATCH_DEFAULT_ONLY).size() > 0) ;
 	}
 
 	private void performExit(){
 		android.os.Process.killProcess(android.os.Process.myPid());
 	}
-	
+
+	@Kroll.method
+	public void startApp() {
+
+		int pendingIntentID = 999124;
+
+
+		// DEBUG
+        Log.d(AndroidtoolsModule.MODULE_FULL_NAME, "[PlatformProxy].startApp():Creating Start Activity");
+
+
+        //Get the Start Activity for your Ti App
+        Intent iStartActivity = TiApplication.getInstance().getApplicationContext().getPackageManager()
+                    .getLaunchIntentForPackage( TiApplication.getInstance().getApplicationContext().getPackageName() );
+
+
+        iStartActivity.addCategory(Intent.CATEGORY_LAUNCHER);
+        iStartActivity.setAction(Intent.ACTION_MAIN);
+
+
+		// DEBUG
+        Log.d(AndroidtoolsModule.MODULE_FULL_NAME, "[PlatformProxy].startApp():Creating Pending Intent");
+
+
+        //Create a pending intent for the Start Activity
+        PendingIntent pendingIntent = PendingIntent.getActivity(TiApplication.getInstance().getApplicationContext(),
+                pendingIntentID,
+                iStartActivity,
+                PendingIntent.FLAG_UPDATE_CURRENT);
+
+
+		// DEBUG
+        Log.d(AndroidtoolsModule.MODULE_FULL_NAME, "[PlatformProxy].startApp():Scheduling Start");
+
+
+        //Schedule an Alarm to restart after a delay
+        AlarmManager mgr = (AlarmManager)TiApplication.getInstance().getApplicationContext().getSystemService(TiApplication.ALARM_SERVICE);
+        mgr.set(AlarmManager.RTC, System.currentTimeMillis(), pendingIntent);
+
+
+	} // END startApp()
+
+	@Kroll.method
+	public boolean isRingerModeSilent() {
+
+		AudioManager am = (AudioManager)TiApplication.getInstance().getApplicationContext().getSystemService(TiApplication.AUDIO_SERVICE);
+
+		if (am.getRingerMode() == AudioManager.RINGER_MODE_SILENT) {
+
+			return true;
+		}
+
+		return false;
+	}
+
+	@Kroll.method
+    public boolean isRingerModeVibrate() {
+
+        AudioManager am = (AudioManager)TiApplication.getInstance().getApplicationContext().getSystemService(TiApplication.AUDIO_SERVICE);
+
+        if (am.getRingerMode() == AudioManager.RINGER_MODE_VIBRATE) {
+
+            return true;
+        }
+
+        return false;
+    }
+
+    @Kroll.method
+    public boolean isRingerModeNormal() {
+
+        AudioManager am = (AudioManager)TiApplication.getInstance().getApplicationContext().getSystemService(TiApplication.AUDIO_SERVICE);
+
+        if (am.getRingerMode() == AudioManager.RINGER_MODE_NORMAL) {
+
+            return true;
+        }
+
+        return false;
+    }
+
 	@Kroll.method
 	public void restartApp(@Kroll.argument(optional=true) String delay)
 	{
 		int pendingIntentID = 999123;
 		long DELAY_OFFSET = 15000;
-		
+
 		if (delay != null) {
 			DELAY_OFFSET = Long.valueOf(delay);
-	    } 
-		
+	    }
+
 		if(TiApplication.getInstance().isDebuggerEnabled()){
 			Log.d(AndroidtoolsModule.MODULE_FULL_NAME, "App cannot be restarted with debugger enabled");
 			throw new IllegalStateException("App cannot be restarted with debugger enabled");
 		}
-		
+
 		Log.d(AndroidtoolsModule.MODULE_FULL_NAME, "Creating Start Activity");
-		
+
 		//Get the Start Activity for your Ti App
 		Intent iStartActivity = TiApplication.getInstance().getApplicationContext().getPackageManager()
 	             	.getLaunchIntentForPackage( TiApplication.getInstance().getApplicationContext().getPackageName() );
-		
+
 		//Add the flags needed to restart
 		iStartActivity.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
 		iStartActivity.addFlags(Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
 		iStartActivity.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
 		iStartActivity.addCategory(Intent.CATEGORY_LAUNCHER);
 		iStartActivity.setAction(Intent.ACTION_MAIN);
-		
+
 		Log.d(AndroidtoolsModule.MODULE_FULL_NAME, "Creating Pending Intent");
-		
+
 		//Create a pending intent for the Start Activity
-		PendingIntent pendingIntent = PendingIntent.getActivity(TiApplication.getInstance().getApplicationContext(), 
-				pendingIntentID,    
+		PendingIntent pendingIntent = PendingIntent.getActivity(TiApplication.getInstance().getApplicationContext(),
+				pendingIntentID,
 				iStartActivity,
 				PendingIntent.FLAG_UPDATE_CURRENT);
-		
+
 		Log.d(AndroidtoolsModule.MODULE_FULL_NAME, "Scheduling Restart");
 		//Schedule an Alarm to restart after a delay
-		AlarmManager mgr = (AlarmManager)TiApplication.getInstance().getApplicationContext().getSystemService(TiApplication.ALARM_SERVICE);		
-		mgr.set(AlarmManager.RTC, System.currentTimeMillis() + DELAY_OFFSET, pendingIntent);		
-		Log.d(AndroidtoolsModule.MODULE_FULL_NAME, "Clean-up and Exit");		
+		AlarmManager mgr = (AlarmManager)TiApplication.getInstance().getApplicationContext().getSystemService(TiApplication.ALARM_SERVICE);
+		mgr.set(AlarmManager.RTC, System.currentTimeMillis() + DELAY_OFFSET, pendingIntent);
+		Log.d(AndroidtoolsModule.MODULE_FULL_NAME, "Clean-up and Exit");
 		//Tell Ti to do some clean-up
 		TiApplication.getInstance().beforeForcedRestart();
-		
+
 		//Do a force quite
 		performExit();
 	}
-		
+
 	@Kroll.method
 	public void exitApp(){
 		performExit();
 	}
-	
+
 	@Kroll.method
 	public void killPackage(String packageName){
 		ActivityManager activityManager = (ActivityManager)TiApplication.getInstance().getApplicationContext().getSystemService(TiApplication.ACTIVITY_SERVICE);
 	    activityManager.killBackgroundProcesses(packageName);
 	}
-	
+
 	@Kroll.method
 	public void killProcess(int pid){
 		android.os.Process.killProcess(pid);
 	}
-	
+
 	@SuppressWarnings({ "rawtypes", "unchecked" })
 	@Kroll.method
 	public Object[] getRunningAppProcesses(){
-	    ArrayList appList = new ArrayList();	    
+	    ArrayList appList = new ArrayList();
 		PackageManager pm = TiApplication.getInstance().getApplicationContext().getPackageManager();
 		ActivityManager activityManager = (ActivityManager) TiApplication.getInstance().getApplicationContext().getSystemService( TiApplication.ACTIVITY_SERVICE );
 	    List<RunningAppProcessInfo> procInfos = activityManager.getRunningAppProcesses();
@@ -145,7 +226,7 @@ public class PlatformProxy  extends KrollProxy {
 				PackageInfo packageInfo = pm.getPackageInfo(procInfos.get(i).processName, PackageManager.GET_META_DATA);
 				record.put("packageName", packageInfo.packageName);
 		    	record.put("versionCode", packageInfo.versionCode);
-		    	record.put("versionName", packageInfo.versionName);	 
+		    	record.put("versionName", packageInfo.versionName);
 		    	record.put("name", packageInfo.applicationInfo.loadLabel(pm).toString());
 		    	record.put("isSystemApp",(!isUserApp(packageInfo.applicationInfo)));
 			} catch (NameNotFoundException e) {
@@ -154,9 +235,9 @@ public class PlatformProxy  extends KrollProxy {
 			}
 			appList.add(record);
 	    }
-	    
+
 	    Object[] returnObject = appList.toArray(new Object[appList.size()]);
-	    
+
 	    return returnObject;
 	}
 	boolean isUserApp(ApplicationInfo ai) {
@@ -167,22 +248,22 @@ public class PlatformProxy  extends KrollProxy {
 	@Kroll.method
 	public Object[] getInstalledApps(){
 
-		ArrayList appList = new ArrayList();	
+		ArrayList appList = new ArrayList();
 		final PackageManager pm = TiApplication.getInstance().getApplicationContext().getPackageManager();
 		List<PackageInfo> packages = pm.getInstalledPackages(PackageManager.GET_META_DATA);
 		for (PackageInfo packageInfo : packages) {
 			HashMap<String, Object> record = new HashMap<String, Object>(5);
 	    	record.put("packageName",packageInfo.packageName);
 	    	record.put("versionCode", packageInfo.versionCode);
-	    	record.put("versionName", packageInfo.versionName);	 
+	    	record.put("versionName", packageInfo.versionName);
 	    	record.put("name", packageInfo.applicationInfo.loadLabel(pm).toString());
 	    	record.put("isSystemApp",(!isUserApp(packageInfo.applicationInfo)));
 			appList.add(record);
-		}	
+		}
 	    Object[] returnObject = appList.toArray(new Object[appList.size()]);
-	    return returnObject;		
+	    return returnObject;
 	}
-	
+
 	@Kroll.method
 	public void launchIntentForPackage(String packageName){
 		Intent launchIntent = TiApplication.getInstance().getApplicationContext().getPackageManager().getLaunchIntentForPackage(packageName);
